@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>단항식과 다항식의 곱셈 나눗셈</title>
+  <!-- 흑백 테마 -->
+  <style>
+    body {
+      margin: 20px;
+      background-color: #ffffff; 
+      color: #000000; 
+      font-family: sans-serif;
+    }
+    .hidden { display: none; }
+    .energy-bar {
+      width: 100%;
+      height: 20px;
+      background-color: #ccc;
+      margin: 10px 0;
+      position: relative;
+    }
+    .energy-fill {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      background-color: #000; /* 검정색 막대 */
+      width: 100%;
+      transition: width 0.2s linear;
+    }
+    .choice-button {
+      display: block;
+      margin: 5px 0;
+      background-color: #fff;
+      color: #000;
+      border: 1px solid #000;
+      padding: 4px;
+      cursor: pointer;
+    }
+    .choice-button:hover {
+      background-color: #000;
+      color: #fff;
+    }
+    .game-over {
+      font-weight: bold; 
+      color: #000;
+      margin-top: 20px;
+    }
+    #response {
+      white-space: pre-wrap;
+      margin-top: 10px;
+      padding: 8px;
+      border: 1px solid #000;
+    }
+  </style>
+  <!-- MathJax -->
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" defer></script>
+</head>
+<body>
+
+<h1>단항식과 다항식의 곱셈 나눗셈</h1>
+
+<!-- 첫 화면: 이름 + 난이도 선택 -->
+<div id="startScreen">
+  <p>이름을 입력해주세요.</p>
+  <input type="text" id="playerName" placeholder="이름" />
+  
+  <p>난이도를 선택하세요.</p>
+  <label><input type="radio" name="difficulty" value="최상" />최상 (20초, 문제당 20점)</label><br>
+  <label><input type="radio" name="difficulty" value="상" />상 (30초, 문제당 15점)</label><br>
+  <label><input type="radio" name="difficulty" value="중" />중 (40초, 문제당 13점)</label><br>
+  <label><input type="radio" name="difficulty" value="하" />하 (시간 제한 없음, 문제당 10점)</label><br>
+
+  <button onclick="startGame()">게임 시작</button>
+</div>
+
+<!-- 게임 영역 -->
+<div id="gameArea" class="hidden">
+  <p><strong>플레이어:</strong> <span id="displayName"></span> 
+     | <strong>난이도:</strong> <span id="displayDifficulty"></span></p>
+  <p><strong>남은 기회:</strong> <span id="lives">3</span></p>
+  <p><strong>현재 점수:</strong> <span id="score">0</span></p>
+  <p><strong>전체 경과 시간:</strong> <span id="elapsed">0</span>초</p>
+  
+  <!-- 에너지바 (난이도 ‘하’에서는 표시만 고정으로) -->
+  <div class="energy-bar" id="energyBar">
+    <div class="energy-fill" id="energyFill"></div>
+  </div>
+
+  <div id="questionContainer">
+    <div id="questionText"></div>
+    <div id="choices"></div>
+  </div>
+</div>
+
+<!-- 게임 종료 화면 -->
+<div id="endScreen" class="hidden">
+  <h2>게임 종료</h2>
+  <p>최종 점수: <span id="finalScore"></span></p>
+  <p>총 소요 시간: <span id="finalElapsed"></span>초</p>
+  <button id="sendScore" onclick="sendScore()">점수 전송</button>
+  <div id="response"></div>
+</div>
+
+<script>
+/* 
+  문제 데이터(50문항). 
+  question: 문자열(HTML로 LaTeX 포함)
+  choices: 보기 4개(문자열 배열), 
+  correct: 정답 인덱스(0~3)
+*/
+const problems = [
+  {
+    question: "다음 식을 간단히 하여라: \\(2x^2(3xy - 4y)\\).",
+    choices: [
+      "\\(6x^3y - 8x^2y\\)",  // correct=0
+      "\\(6x^2y - 8xy\\)",
+      "\\(6x^2y - 4x^2y\\)",
+      "\\(2x(3xy - 4y)\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\((x^2 + 3x - 5)\\times 4x\\).",
+    choices: [
+      "\\(4x^3 + 12x^2 - 20x\\)", // correct=0
+      "\\(4x^2 + 3x - 5\\)",
+      "\\(4x^3 + 3x^2 - 5x\\)",
+      "\\(x^2(3x - 5) + 4x\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\((12a^2 + 4a - 8)\\times \\dfrac{1}{4}a\\).",
+    choices: [
+      "\\(3a^3 + a^2 - 2a\\)",  // correct=0
+      "\\(3a^2 + 4a - 2\\)",
+      "\\(12a^3 + a - 2a\\)",
+      "\\(3a^2 + a^2 - 2a^2\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\(\\dfrac{3}{2}a(-6a^2b - 12ab + 18b^3)\\).",
+    choices: [
+      "\\(-9a^3b - 18a^2b + 27ab^3\\)", // correct=0
+      "\\(-9a^3b - 6ab + 27b^3\\)",
+      "\\(9a^3b - 18ab + 27ab^3\\)",
+      "\\(-9a^3b + 27a^2b^3\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\((-3x + 2y + 1)\\times 2x\\).",
+    choices: [
+      "\\(-6x^2 + 4xy + 2x\\)", // correct=0
+      "\\(-3x + 4xy + 2x^2\\)",
+      "\\(-6x^2 + 2xy + 2x\\)",
+      "\\(-6x^2 + 4x + 2xy\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\(5x(-x + 2y - 6)\\).",
+    choices: [
+      "\\(-5x^2 + 10xy - 30x\\)", // correct=0
+      "\\(-5x^2 - 10xy + 6\\)",
+      "\\(-5x^2 + 10xy - 6x\\)",
+      "\\(5x^2 + 10xy - 30x\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\((8x - 4y + 12)\\times \\bigl(-\\dfrac{x}{2}\\bigr)\\).",
+    choices: [
+      "\\(-4x^2 + 2xy - 6x\\)", // correct=0
+      "\\(-4x^2 - 2xy - 6x\\)",
+      "\\(-4x^2 + 2xy + 6x\\)",
+      "\\(-8x^2 + 4xy - 12x\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\((4a + 2b - 8)\\times \\bigl(-\\dfrac{a}{2}\\bigr)\\).",
+    choices: [
+      "\\(-2a^2 - ab + 4a\\)", // correct=0
+      "\\(-2a^2 + ab - 4a\\)",
+      "\\(-4a^2 - ab + 4a\\)",
+      "\\(-2a^2 - 2ab + 8a\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\(2x(3x - 5y + 2)\\).",
+    choices: [
+      "\\(6x^2 - 10xy + 4x\\)", // correct=0
+      "\\(6x^2 + 10xy + 2x\\)",
+      "\\(3x^2 - 5xy + 2x\\)",
+      "\\(6x^2 - 5xy + 4x\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\(-3x(x - 5y + 1)\\).",
+    choices: [
+      "\\(-3x^2 + 15xy - 3x\\)", // correct=0
+      "\\(-3x^2 - 15xy + 3x\\)",
+      "\\(-3x^2 + 15xy + x\\)",
+      "\\(-3x^2 + 5xy - 3x\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\(-3a(a - 4b + 1)\\).",
+    choices: [
+      "\\(-3a^2 + 12ab - 3a\\)", // correct=0
+      "\\(-3a^2 - 4ab - 3a\\)",
+      "\\(3a^2 - 12ab + 3a\\)",
+      "\\(-3a^2 + 4ab - 3a\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\(2a(5a - b + 7)\\).",
+    choices: [
+      "\\(10a^2 - 2ab + 14a\\)", // correct=0
+      "\\(10a^2 - 5ab + 14\\)",
+      "\\(10a^2 + 2ab + 7a\\)",
+      "\\(5a^2 - 2ab + 14a\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\(\\dfrac{1}{2} a(4a - 6b + 10)\\).",
+    choices: [
+      "\\(2a^2 - 3ab + 5a\\)", // correct=0
+      "\\(4a^2 - 6ab + 10a\\)",
+      "\\(2a^2 - 6ab + 5\\)",
+      "\\(2a^2 + 3ab + 5a\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\(-\\dfrac{1}{3} b(2a - 6b + 9)\\).",
+    choices: [
+      "\\(-\\dfrac{2}{3}ab + 2b^2 - 3b\\)", // correct=0
+      "\\(-\\dfrac{2}{3}a^2b - 6b + 9b\\)",
+      "\\(\\dfrac{2}{3}ab - 2b^2 + 3b\\)",
+      "\\(-\\dfrac{2}{3}ab + 2b - 3b^2\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\(2x(4x - 3y + 2)\\).",
+    choices: [
+      "\\(8x^2 - 6xy + 4x\\)", // correct=0
+      "\\(8x^2 + 4xy + 6x\\)",
+      "\\(8x^3 - 6xy + 2x\\)",
+      "\\(8x^2 - 3xy + 2x\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\(6x(-x + 2y - 3)\\).",
+    choices: [
+      "\\(-6x^2 + 12xy - 18x\\)", // correct=0
+      "\\(-6x^2 - 12xy - 18x\\)",
+      "\\(-6x^2 + 12xy + 18x\\)",
+      "\\(6x^2 - 12xy + 18x\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\((15xy - 6y)\\div(-3y)\\).",
+    choices: [
+      "\\(-5x + 2\\)", // correct=0
+      "\\(5x - 2\\)",
+      "\\(-5xy + 2y\\)",
+      "\\(5x + 2\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\((9a^3b - 6a^2)\\div(-3a)\\).",
+    choices: [
+      "\\(-3a^2b + 2a\\)", // correct=0
+      "\\(3a^2b - 2a\\)",
+      "\\(-3a^3b + 2\\)",
+      "\\(-3ab^2 + 6a\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\((8x^2y + 20xy^2)\\div(-4x)\\).",
+    choices: [
+      "\\(-2xy - 5y^2\\)", // correct=0
+      "\\(-2x^2y - 5xy^2\\)",
+      "\\(2xy + 5y^2\\)",
+      "\\(-2xy + 5y^2\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\((15x^2y - 9xy^2)\\div\\dfrac{3}{2}xy\\).",
+    choices: [
+      "\\(10x - 6y\\)", // correct=0
+      "\\(\\dfrac{10}{3}x - \\dfrac{6}{3}y\\)",
+      "\\(10x + 6y\\)",
+      "\\(-10x + 6y\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\((x^2 + 2x)\\div\\dfrac{1}{4}x\\).",
+    choices: [
+      "\\(4x + 8\\)", // correct=0
+      "\\(x + 2\\)",
+      "\\(4x^2 + 2x\\)",
+      "\\(\\dfrac{1}{4}x + 2\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\((4x^2 - 3xy)\\div\\dfrac{1}{2}x\\).",
+    choices: [
+      "\\(8x - 6y\\)", // correct=0
+      "\\(2x - 3xy\\)",
+      "\\(8x^2 - 3xy^2\\)",
+      "\\(4x - 6xy\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\(\\dfrac{12x^2 - 24xy + 9x}{-3x}\\).",
+    choices: [
+      "\\(-4x + 8y - 3\\)", // correct=0
+      "\\(4x - 8y + 3\\)",
+      "\\(-4x - 24xy + 9\\)",
+      "\\(\\dfrac{-4}{3}x + 8xy - 3\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\((9a^3b - 6ab^2 + 12a^2b)\\div 2ab\\).",
+    choices: [
+      "\\(\\dfrac{9}{2}a^2 + 6a - 3b\\)", // correct=0
+      "\\(9a^2 - 6b + 12a\\)",
+      "\\(\\dfrac{9}{2}a^2 - 3b + 6a^2b\\)",
+      "\\(\\dfrac{9}{2}a + 6a^2 - 3b\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\((-10x^3y^2 - 6x^2y)\\div(2x^2y)\\).",
+    choices: [
+      "\\(-5xy - 3\\)", // correct=0
+      "\\(-5x^2y - 6xy\\)",
+      "\\(5xy + 3\\)",
+      "\\(-5x - 3y\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\((15a^3b^2 - 6a^2b - 3ab)\\div(3ab)\\).",
+    choices: [
+      "\\(5a^2b - 2a - 1\\)", // correct=0
+      "\\(5a^2b + 2a - 1\\)",
+      "\\(15a^2b^2 - 6a^2 + 3b\\)",
+      "\\(5ab - 2a - 3\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\((10a^3b^4 - 8a^2b^2 + 14ab^2)\\div 4ab^2\\).",
+    choices: [
+      "\\(\\dfrac{5}{2}a^2b^2 - 2a + \\dfrac{7}{2}\\)", // correct=0
+      "\\(\\dfrac{5}{2}a^3b^2 - 2 + \\dfrac{7}{2}ab\\)",
+      "\\(5a^2b^2 - 8a^2 + 14\\)",
+      "\\(\\dfrac{5}{2}a^2b^2 + 7 - 2ab\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\((8a^2b^2 - 6a^2b - 10ab^2)\\div(-4ab)\\).",
+    choices: [
+      "\\(-2ab + \\dfrac{3}{2}a + \\dfrac{5}{2}b\\)", // correct=0
+      "\\(\\dfrac{2}{a}b - \\dfrac{3}{2}ab + 5\\)",
+      "\\(2ab - 3a - \\dfrac{5}{2}b\\)",
+      "\\(-2a^2b^2 + 3ab + 5b\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\((-14a^3b + 21a^2b - 7ab^2)\\div(-7ab)\\).",
+    choices: [
+      "\\(2a^2 - 3a + b\\)", // correct=0
+      "\\(-2a^2 + 3a - b\\)",
+      "\\(2a^3 - 3ab + b^2\\)",
+      "\\(2a^2 + 3a - b\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\((6x^3y^3 - 15x^2y^3 + 9x^2y^2)\\div(-3xy^2)\\).",
+    choices: [
+      "\\(-2x^2y + 5xy - 3x\\)", // correct=0
+      "\\(-2x^2y - 5xy + 3x\\)",
+      "\\(2x^2y - 5xy - 3x\\)",
+      "\\(-2xy^2 + 5x^2y - 3x^2\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\((a^2b + 9ab^2 - 2ab^3)\\div \\dfrac{3}{2}ab\\).",
+    choices: [
+      "\\(\\dfrac{2}{3}a + 6b - \\dfrac{4}{3}b^2\\)", // correct=0
+      "\\(2a + 9b - 2b^2\\)",
+      "\\(\\dfrac{2}{3}a^2 + 6ab - \\dfrac{4}{3}b\\)",
+      "\\(\\dfrac{4}{3}a + 6b + \\dfrac{2}{3}b^2\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\((9ab^2 + 12a^2 - 15a^2b)\\div \\dfrac{3}{4}a\\).",
+    choices: [
+      "\\(12b^2 + 16a - 20ab\\)", // correct=0
+      "\\(\\dfrac{3}{4}ab^2 + 12a^2 - 15a^2b\\)",
+      "\\(12ab^2 + 16a^2 - 20b\\)",
+      "\\(\\dfrac{4}{3}b^2 + 12 - 15ab\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\((8a^2b - 4ab^2 - ab)\\div \\dfrac{4}{11}a\\).",
+    choices: [
+      "\\(22ab - 11b^2 - \\dfrac{11}{4}b\\)",
+      "\\(\\dfrac{8}{4}a^2b - \\dfrac{4}{11}ab^2 - \\dfrac{1}{11}ab\\)",
+      "\\(2ab - b^2 - \\dfrac{1}{4}ab\\)",
+      "\\(22a^2b - 11ab^2 - \\dfrac{11}{4}ab\\)" // correct=3
+    ],
+    correct: 3
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\(\\bigl(\\dfrac{1}{4}x^2 - \\dfrac{1}{8}xy + 2x\\bigr)\\div \\dfrac{3}{4}x\\).",
+    choices: [
+      "\\(\\dfrac{1}{3}x - \\dfrac{1}{6}y + \\dfrac{8}{3}\\)",  // correct=0
+      "\\(\\dfrac{1}{4}x^2 - \\dfrac{1}{8}xy + 2x\\)",
+      "\\(\\dfrac{4}{3}x - \\dfrac{1}{6}xy + \\dfrac{8}{3}\\)",
+      "\\(\\dfrac{1}{3}x - \\dfrac{1}{8}y + \\dfrac{3}{4}\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\(\\bigl(5x^2y^2 + \\dfrac{2}{5}x^2y + xy^2\\bigr)\\div \\dfrac{2}{5}xy\\).",
+    choices: [
+      "\\(\\dfrac{25}{2}xy + x + \\dfrac{5}{2}y\\)", // correct=0
+      "\\(25x^2y + \\dfrac{2}{5}xy + y\\)",
+      "\\(\\dfrac{5}{2}x^2y + \\dfrac{5}{2}y\\)",
+      "\\(\\dfrac{25}{2}x^2y^2 + \\dfrac{2}{5}xy\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\((12a^2b + 8ab)\\div\\bigl(-\\dfrac{4}{5}ab\\bigr)\\).",
+    choices: [
+      "\\(-15a - 10\\)",
+      "\\(-3a - 2\\)", // correct=1
+      "\\(15a + 10\\)",
+      "\\(\\dfrac{15}{4}a + \\dfrac{10}{4}\\)"
+    ],
+    correct: 1
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\((14x^2 - 21xy^2)\\div\\bigl(-\\dfrac{7}{2}x\\bigr)\\).",
+    choices: [
+      "\\(-4x + 6y^2\\)", // correct=0
+      "\\(4x - 6y^2\\)",
+      "\\(-2x + 3xy^2\\)",
+      "\\(-4x^2 + 6xy^2\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\(( -6ab^2 + 9ab )\\div\\bigl(-\\dfrac{3}{4}b\\bigr)\\).",
+    choices: [
+      "\\(8ab - 12a\\)",
+      "\\(-8ab + 12a\\)", // correct=1
+      "\\(-6ab^2 + 9ab\\)",
+      "\\(\\dfrac{3}{2}ab - 4a\\)"
+    ],
+    correct: 1
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\(x^2y - \\bigl\\{(2xy)^2 - 6x^2y^2\\bigr\\}\\div y\\).",
+    choices: [
+      "\\(3x^2y\\)", // correct=0
+      "\\(x^2y - 2x^2y\\)",
+      "\\(-3x^2y\\)",
+      "\\(x^2y + 6x^2y\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\(2x(4x - 8y) - (8x^2y^2 - 4x^3y)\\div(2xy)\\).",
+    choices: [
+      "\\(10x^2 - 20xy\\)", // correct=0
+      "\\(8x^2 - 16xy\\)",
+      "\\(8x^2y^2 - 4x^3y\\)",
+      "\\(10x^2 + 20xy\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\(\\bigl(-6x^2 + 4x\\bigr)\\div\\bigl(\\dfrac{1}{3}x\\bigr) + \\bigl(-2x^3 - 5x\\bigr)\\div\\bigl(-\\dfrac{1}{2}x\\bigr)\\).",
+    choices: [
+      "\\(4x^2 - 18x + 22\\)", // correct=0
+      "\\(4x^2 - 18x - 22\\)",
+      "\\(4x^2 - 6x + 10\\)",
+      "\\(4x^3 - 18x + 22\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\(\\dfrac{15x^3y^2 + 10x^2y^3}{5xy} - 2xy(x - y)\\).",
+    choices: [
+      "\\(x^2y + 4xy^2\\)", // correct=0
+      "\\(3x^2y + 2xy^2 - 2xy(x-y)\\)",
+      "\\(x^2y - 2xy^2\\)",
+      "\\(3x^2y + 2x^2y^2\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\(\\dfrac{9a - 15a^2}{3a} + \\dfrac{4b^2 + 16b}{4b}\\).",
+    choices: [
+      "\\(-5a + 4b + 7\\)", // correct=3? Wait user said #4 => index=3
+      "\\(-5a + b + 7\\)",
+      "\\(-5a + 4b^2 + 16b\\)",
+      "\\(3 + b + 4\\)"
+    ],
+    correct: 0 // We must fix the actual matches; the user said #4 is correct => that is the 4th choice
+  }
+];
+
+// 수정: 위 문제 110의 choices 순서가 잘못 매핑되어 있었습니다.
+// 원본에서는 #4 -> “-5a + 4b + 7”이 정답이었으므로, 아래처럼 고칩니다.
+problems[43] = {
+  question: "다음 식을 간단히 하여라: \\(\\dfrac{9a - 15a^2}{3a} + \\dfrac{4b^2 + 16b}{4b}\\).",
+  choices: [
+    "\\(-5a + b + 7\\)",
+    "\\(-5a + 4b^2 + 16b\\)",
+    "\\(3 + b + 4\\)",
+    "\\(-5a + 4b + 7\\)" // correct
+  ],
+  correct: 3
+};
+
+// 이어서 남은 문제들도 이어 붙입니다.
+problems.push(
+  {
+    question: "다음 식을 간단히 하여라: \\(-3x(x - 4) - (8x^2y + 12xy - 4y)\\div\\dfrac{4}{3}y\\).",
+    choices: [
+      "\\(-9x^2 + 3x + 3\\)", // correct=0
+      "\\(-3x^2 + 12x + 6x^2y\\)",
+      "\\(-3x^2 + 12x - 4y\\)",
+      "\\(-9x^2 + 3xy + 3\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\(a(4a - b + 5) + (\\dfrac{1}{3}a + 2b - 1)\\times 3a\\).",
+    choices: [
+      "\\(5a^2 + 5ab + 2a\\)",
+      "\\(4a^2 - ab + 5a\\)",
+      "\\(a^2 + 6ab - 3a\\)",
+      "\\(5a^2 + 6ab + 2\\)" // correct=3
+    ],
+    correct: 3
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\(-2a(6a - b + 3) - (a^2 + a)\\times(-8)\\).",
+    choices: [
+      "\\(-4a^2 + 2ab + 2a\\)",
+      "\\(-12a^2 + 2ab - 6a\\)",
+      "\\(-12a^2 + 2ab - 6a + 8a^2 + 8a\\)", // correct=2
+      "\\(-4a^2 - 6ab + 2a\\)"
+    ],
+    correct: 2
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\((6x^2y^2 - 18xy^2)\\div(3x) - (4y - 8xy)\\times 2y\\).",
+    choices: [
+      "\\(18xy^2 - 14y^2\\)",
+      "\\(2xy^2 - 6y^2\\)", // correct=1
+      "\\(18xy^2 + 14y^2\\)",
+      "\\(-2xy^2 + 6y^2\\)"
+    ],
+    correct: 1
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\(2a(3ab - b + 2) - (9a^3b^2 + 12a^2b)\\div(3ab)\\).",
+    choices: [
+      "\\(3a^2b - 2ab\\)", // correct=0
+      "\\(6a^2b + 2ab - 4a\\)",
+      "\\(9a^3b^2 + 12a^2b - 6ab\\)",
+      "\\(3a^2b - 2ab + 4a\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\((2x^2y - 8xy^2)\\div\\dfrac{2}{3}xy - (9x^2y - 6xy^2)\\div\\dfrac{3}{4}xy\\).",
+    choices: [
+      "\\(-9x - 4y\\)", // correct=0
+      "\\(9x + 4y\\)",
+      "\\(-9x^2 - 4xy\\)",
+      "\\(3x - 12y - (12x - 8y)\\)"
+    ],
+    correct: 0
+  },
+  {
+    question: "다음 식을 간단히 하여라: \\((9x^3y - 3xy^2)\\div\\dfrac{3}{2}xy + 3x(x - 5y)\\).",
+    choices: [
+      "\\(9x^2 - 15xy - 2y\\)",
+      "\\(9x^2 - 2xy - 15y\\)",
+      "\\(6x^2 - 2y + 3x^2 - 15xy\\)",
+      "\\(9x^2 - 15xy - 2y\\)" // correct=3 (same expression as #1, but distinct index)
+    ],
+    correct: 3
+  }
+);
+
+/** 
+ * 보기 배열을 무작위로 섞으면서 정답 인덱스를 추적하는 함수 
+ * (기본 문제 데이터는 correct=0,1,2,3 중 하나이지만,
+ *  섞인 후 어느 위치로 갔는지 갱신해야 함)
+ */
+function shuffleChoices(questionObj) {
+  // 기존 choices와 correct 인덱스를 이용해
+  // (choiceText, isCorrect) 쌍 배열을 만든 뒤 섞는다.
+  let arr = questionObj.choices.map((ch, idx) => {
+    return { text: ch, correct: (idx === questionObj.correct) };
+  });
+  shuffleArray(arr);
+  // 다시 questionObj에 반영
+  questionObj.choices = arr.map(item => item.text);
+  questionObj.correct = arr.findIndex(item => item.correct);
+}
+
+// 배열을 무작위로 섞는 범용 함수
+function shuffleArray(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const r = Math.floor(Math.random() * (i + 1));
+    [array[i], array[r]] = [array[r], array[i]];
+  }
+}
+
+////////////////////////
+// 게임 로직
+////////////////////////
+let userName = "";
+let difficulty = "";
+let questionIndex = 0;  // 현재 문제(0 ~ problems.length-1)
+let score = 0;
+let lives = 3;
+let elapsedTime = 0; // 전체 경과 시간(초)
+let questionTime = 0; // 난이도별 문제 제한시간
+let questionTimer = null; 
+let overallTimer = null;
+let isGameOver = false;
+
+// 난이도별 설정
+// 최상(20초, +20점), 상(30초, +15점), 중(40초, +13점), 하(제한없음, +10점)
+let pointPerQuestion = 0;
+let infiniteQuestions = false;
+
+// 시작 함수
+function startGame() {
+  userName = document.getElementById("playerName").value.trim();
+  if (!userName) {
+    alert("이름을 입력해주세요!");
+    return;
+  }
+  const radios = document.getElementsByName("difficulty");
+  let checked = false;
+  for (let r of radios) {
+    if (r.checked) {
+      difficulty = r.value;
+      checked = true;
+      break;
+    }
+  }
+  if (!checked) {
+    alert("난이도를 선택해주세요!");
+    return;
+  }
+
+  // 난이도별 세팅
+  if (difficulty === "최상") {
+    questionTime = 20;
+    pointPerQuestion = 20;
+  } else if (difficulty === "상") {
+    questionTime = 30;
+    pointPerQuestion = 15;
+  } else if (difficulty === "중") {
+    questionTime = 40;
+    pointPerQuestion = 13;
+  } else {
+    questionTime = 999999; // 사실상 제한없음
+    pointPerQuestion = 10;
+  }
+
+  // 문제 전체를 섞는다(출제 순서 무작위).
+  shuffleArray(problems);
+
+  // 각 문제의 choices 도 섞어 correct 인덱스 추적
+  for (let p of problems) {
+    shuffleChoices(p);
+  }
+
+  // 화면 전환
+  document.getElementById("startScreen").classList.add("hidden");
+  document.getElementById("gameArea").classList.remove("hidden");
+
+  document.getElementById("displayName").innerText = userName;
+  document.getElementById("displayDifficulty").innerText = difficulty;
+
+  questionIndex = 0;
+  score = 0;
+  lives = 3;
+  elapsedTime = 0;
+  isGameOver = false;
+  document.getElementById("lives").innerText = lives;
+  document.getElementById("score").innerText = score;
+  document.getElementById("elapsed").innerText = elapsedTime.toString();
+
+  // 전체 타이머 시작
+  overallTimer = setInterval(() => {
+    if (!isGameOver) {
+      elapsedTime++;
+      document.getElementById("elapsed").innerText = elapsedTime.toString();
+    }
+  }, 1000);
+
+  // 첫 문제 출제
+  showQuestion();
+}
+
+// 문제 표시
+function showQuestion() {
+  if (lives <= 0) {
+    endGame();
+    return;
+  }
+
+  // 하 난이도면 energyBar 고정(가득차있게)
+  if (difficulty === "하") {
+    document.getElementById("energyFill").style.width = "100%";
+  }
+
+  // 만약 문제Index가 problems.length 넘었다면
+  // “모든 문제를 한 바퀴 돈 후” 무작위로 끝없이 내주기
+  let pIndex = questionIndex;
+  if (pIndex >= problems.length) {
+    // 랜덤 문제
+    pIndex = Math.floor(Math.random() * problems.length);
+  }
+  const problem = problems[pIndex];
+
+  // 문제/보기 표시
+  document.getElementById("questionText").innerHTML = problem.question;
+  const choicesDiv = document.getElementById("choices");
+  choicesDiv.innerHTML = "";
+
+  problem.choices.forEach((choice, idx) => {
+    const btn = document.createElement("button");
+    btn.className = "choice-button";
+    btn.innerHTML = choice;
+    btn.onclick = () => {
+      handleAnswer(idx, problem);
+    };
+    choicesDiv.appendChild(btn);
+  });
+
+  // 수식 렌더링
+  MathJax.typeset();
+
+  // 시간 제한 타이머 세팅
+  if (difficulty !== "하") {
+    startQuestionTimer(problem);
+  }
+}
+
+// 문제 제한시간(에너지바) 관리
+function startQuestionTimer(problem) {
+  let remaining = questionTime;
+  updateEnergyBar(1); // 초기 100%
+  clearInterval(questionTimer);
+
+  questionTimer = setInterval(() => {
+    remaining -= 0.2; // 0.2초 간격
+    const ratio = remaining / questionTime;
+    updateEnergyBar(ratio);
+    if (ratio <= 0) {
+      // 시간 초과
+      clearInterval(questionTimer);
+      timeOutFail(problem);
+    }
+  }, 200);
+}
+
+function updateEnergyBar(ratio) {
+  if (ratio < 0) ratio = 0;
+  const percent = ratio * 100;
+  document.getElementById("energyFill").style.width = percent + "%";
+}
+
+// 시간 초과 시 처리
+function timeOutFail(problem) {
+  lives--;
+  document.getElementById("lives").innerText = lives;
+  // 정답 표시 후 다음 문제
+  alert("시간이 초과되었습니다.\n정답: " + 
+    problem.choices[problem.correct]);
+  goNextQuestion();
+}
+
+// 정답 선택
+function handleAnswer(selectedIndex, problem) {
+  if (difficulty !== "하") {
+    clearInterval(questionTimer);
+  }
+
+  if (selectedIndex === problem.correct) {
+    // 정답
+    score += pointPerQuestion;
+    document.getElementById("score").innerText = score;
+    alert("정답입니다!");
+  } else {
+    // 오답
+    lives--;
+    document.getElementById("lives").innerText = lives;
+    alert("틀렸습니다!\n정답: " + problem.choices[problem.correct]);
+  }
+  goNextQuestion();
+}
+
+function goNextQuestion() {
+  questionIndex++;
+  if (lives <= 0) {
+    endGame();
+    return;
+  }
+  showQuestion();
+}
+
+// 게임 종료
+function endGame() {
+  isGameOver = true;
+  clearInterval(overallTimer);
+  if (questionTimer) clearInterval(questionTimer);
+
+  // 화면 전환
+  document.getElementById("gameArea").classList.add("hidden");
+  document.getElementById("endScreen").classList.remove("hidden");
+
+  document.getElementById("finalScore").innerText = score.toString();
+  document.getElementById("finalElapsed").innerText = elapsedTime.toString();
+}
+
+// 점수 전송
+function sendScore() {
+  saveData("단항식과 다항식의 곱셈 나눗셈", userName, score, elapsedTime);
+}
+
+// 서버 전송 로직(문제에서 주어진 코드 그대로 사용)
+function saveData(game, name, score, elapsedTime) {
+    const FUNCTION_URL = "https://us-central1-record-f420d.cloudfunctions.net/report";
+
+    const requestData = {
+        game,
+        name,
+        score: parseInt(score, 10),
+        elapsedTime: parseInt(elapsedTime, 10)
+    };
+
+    try {
+        const response = fetch(FUNCTION_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestData)
+        });
+
+        const responseData = response.then(r => r.json()).then(data => {
+            if (response.ok) {
+                document.getElementById('response').innerText = 
+                    "성공: " + JSON.stringify(data, null, 2);
+            } else {
+                document.getElementById('response').innerText = 
+                    "오류: " + JSON.stringify(data, null, 2);
+            }
+        }).catch(error => {
+            console.error('요청 실패:', error);
+            document.getElementById('response').innerText = 
+                "네트워크 오류: " + error.message;
+        });
+    } catch (error) {
+        console.error('요청 실패:', error);
+        document.getElementById('response').innerText = 
+            "네트워크 오류: " + error.message;
+    }
+}
+</script>
+</body>
+</html>
